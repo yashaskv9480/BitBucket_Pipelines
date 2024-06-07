@@ -1,0 +1,88 @@
+definitions:
+  services:
+    docker:
+      memory: 1024
+  steps:
+  - step: &backend_docker
+      name: Build and Push Backend Docker Image
+      services:
+        - docker
+      script:
+        - echo "Docker login and pushing the image to Dockerhub.User $DOCKERHUB_USERNAME"
+        - cd Fit_Factory_server
+        - docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_PASSWORD
+        - docker build -t $DOCKERHUB_USERNAME/server .
+        - docker push $DOCKERHUB_USERNAME/server
+
+  - step: &frontend_docker
+      name: Build and Push Frontend Docker Image
+      services:
+        - docker
+      size: 2x
+      script:
+        - echo "Docker login and pushing the image to Dockerhub.User $DOCKERHUB_USERNAME"
+        - cd Fit_Factory_Client
+        - docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_PASSWORD
+        - docker build -t $DOCKERHUB_USERNAME/client .
+        - docker push $DOCKERHUB_USERNAME/client
+
+  - step: &deploy_backend 
+        name: Deploy Backend Fit_Factory_server
+        image: governmentpaas/cf-cli
+        services:
+          - docker
+        script:
+          - echo "Starting Backend Deployment"
+          - cf login -a $CF_API -u $CF_USER -p $CF_PASSWORD -o $CF_ORG -s $CF_SPACE
+          - CF_DOCKER_PASSWORD=$DOCKERHUB_PASSWORD cf push -k 2G server --docker-image $DOCKERHUB_USERNAME/server --docker-username $DOCKERHUB_USERNAME
+
+  - step: &deploy_frontend
+        name: DEploy Frontend Fit_Factory_Client
+        image: governmentpaas/cf-cli
+        services:
+            - docker
+        script:
+            - echo "Starting Backend Deployment"
+            - cf login -a $CF_API -u $CF_USER -p $CF_PASSWORD -o $CF_ORG -s $CF_SPACE
+            - CF_DOCKER_PASSWORD=$DOCKERHUB_PASSWORD cf push -k 2G client --docker-image $DOCKERHUB_USERNAME/client --docker-username $DOCKERHUB_USERNAME
+
+
+
+
+pipelines:
+  custom:
+    build_frontend:
+      - variables:
+          - name: CF_ORG
+          - name: CF_USER
+          - name: CF_API
+          - name: CF_SPACE  
+          - name: CF_PASSWORD
+          - name: DOCKERHUB_USERNAME
+          - name: DOCKERHUB_PASSWORD 
+      - step: *frontend_docker
+      - step: *deploy_frontend
+
+    build_backend:
+      - variables:
+          - name: CF_ORG
+          - name: CF_USER
+          - name: CF_API
+          - name: CF_SPACE  
+          - name: CF_PASSWORD
+          - name: DOCKERHUB_USERNAME
+          - name: DOCKERHUB_PASSWORD
+      - step: *backend_docker
+      - step: *deploy_backend
+
+    deploy_backend: 
+      - variables:
+          - name: CF_ORG
+          - name: CF_USER
+          - name: CF_API
+          - name: CF_SPACE  
+          - name: CF_PASSWORD
+          - name: DOCKERHUB_USERNAME
+          - name: DOCKERHUB_PASSWORD
+      - step: *deploy_backend
+
